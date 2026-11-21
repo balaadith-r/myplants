@@ -1,24 +1,61 @@
 import Image from "next/image";
+import { DevIconAnchors } from "./dev-icon-anchors";
 
 const navigation = [
-  { label: "Nursery", assets: ["/figma/nursery-cash.svg", "/figma/nursery-tree.svg"], className: "nursery-link" },
-  { label: "Inventory", assets: ["/figma/inventory-pot-one.svg", "/figma/inventory-pot-two.svg"], className: "inventory-link" },
-  { label: "Plant New", assets: ["/figma/plant-new-grass.svg", "/figma/plant-new-shovel.svg"], className: "plant-new-link" },
-  { label: "Me", assets: ["/figma/me-flower.svg"], className: "me-link" },
+  {
+    label: "Nursery",
+    className: "nursery-link",
+    icons: [
+      { className: "nursery-cash", src: "/figma/nursery-cash.svg" },
+      { className: "nursery-tree", src: "/figma/nursery-tree.svg" },
+    ],
+  },
+  {
+    label: "Inventory",
+    className: "inventory-link",
+    icons: [
+      { className: "inventory-pot-one", src: "/figma/inventory-pot-one.svg" },
+      { className: "inventory-pot-two", src: "/figma/inventory-pot-two.svg" },
+    ],
+  },
+  {
+    label: "Plant New",
+    className: "plant-new-link",
+    icons: [
+      { className: "plant-new-grass", src: "/figma/plant-new-grass.svg" },
+      { className: "plant-new-shovel", src: "/figma/plant-new-shovel.svg" },
+    ],
+  },
+  {
+    label: "Me",
+    className: "me-link",
+    icons: [{ className: "me-flower", src: "/figma/me-flower.svg" }],
+  },
 ] as const;
 
 export default function Home() {
   return (
     <main className="garden-home">
+      {process.env.NODE_ENV === "development" ? <DevIconAnchors /> : null}
       <header className="garden-header">
-        <p className="wordmark">Placeholder</p>
+        <p className="wordmark">myPlants</p>
         <nav aria-label="Primary navigation" className="garden-navigation">
-          {navigation.map(({ label, assets, className }) => (
+          {navigation.map(({ label, icons, className }) => (
             <button className={`nav-link ${className}`} key={label} type="button">
-              <span aria-hidden="true" className="nav-art">
-                {assets.map((asset) => <Image alt="" height={50} key={asset} src={asset} width={50} />)}
+              <span className="nav-label">
+                {icons.map((icon) => (
+                  <Image
+                    alt=""
+                    className={`nav-icon ${icon.className}`}
+                    height={50}
+                    key={icon.src}
+                    loading="eager"
+                    src={icon.src}
+                    width={50}
+                  />
+                ))}
+                {label}
               </span>
-              <span>{label}</span>
             </button>
           ))}
         </nav>

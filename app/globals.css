@@ -9,17 +9,34 @@ button { font: inherit; }
 .garden-header { align-items: center; border-bottom: 2px solid var(--ink); display: flex; flex: 0 0 101px; padding: 0; position: relative; }
 .wordmark, .nav-link { font-family: var(--font-hand), cursive; font-size: 40px; font-weight: 400; line-height: 1; }
 .wordmark { font-size: 48px; left: 31px; margin: 0; position: absolute; top: 28px; }
-.garden-navigation { display: contents; }
-.nav-link { align-items: center; background: none; border: 0; color: var(--ink); cursor: pointer; display: inline-flex; min-height: 44px; padding: 0; position: relative; white-space: nowrap; }
+.garden-navigation { align-items: flex-start; display: flex; position: absolute; right: clamp(40px, 15.715vw, 226.3px); top: 0; }
+.nav-link { align-items: center; background: none; border: 0; color: var(--ink); cursor: pointer; display: inline-flex; flex: 0 0 auto; justify-content: center; min-height: 44px; padding: 0; position: relative; top: 36px; white-space: nowrap; }
 .nav-link:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
-.nav-art { display: inline-block; position: relative; }
-.nav-art img { height: auto; max-width: none; position: absolute; width: auto; }
-.nursery-link { left: 689px; top: 25px; }.nursery-link .nav-art { height: 41px; width: 107px; }.nursery-link img:first-child { height: 27px; left: 0; top: 23px; transform: rotate(-15deg); }.nursery-link img:last-child { height: 41px; left: 81px; top: 0; }.nursery-link > span:last-child { left: 22px; position: absolute; top: 13px; }
-.inventory-link { left: 853px; top: 45px; }.inventory-link .nav-art { height: 35px; width: 121px; }.inventory-link img:first-child { height: 19px; left: 0; top: 10px; }.inventory-link img:last-child { height: 30px; left: 92px; top: 0; transform: rotate(22deg); }.inventory-link > span:last-child { left: 9px; position: absolute; top: -7px; }
-.plant-new-link { left: 1017px; top: 54px; }.plant-new-link .nav-art { height: 28px; width: 109px; }.plant-new-link img:first-child { height: 20px; left: 0; top: 0; }.plant-new-link img:last-child { height: 14px; left: 95px; top: 8px; }.plant-new-link > span:last-child { left: 12px; position: absolute; top: -16px; }
-.me-link { left: 1202px; top: 54px; }.me-link .nav-art { height: 25px; width: 24px; }.me-link img { height: 21px; left: 0; top: 0; }.me-link > span:last-child { left: -15px; position: absolute; top: -16px; }
-.nursery-link, .inventory-link, .plant-new-link, .me-link { position: absolute; }
+/* Icons are anchored to the label's center, so they travel with the word.
+   Every icon is described by five numbers, all relative to that center:
+   --icon-h     height in px
+   --icon-ratio the SVG's own width / height, so the box keeps its shape even
+                before the image has loaded (width follows the ratio)
+   --icon-x     horizontal offset: positive = right, negative = left
+   --icon-y     vertical offset: positive = down, negative = up
+   --icon-rot   rotation in degrees, spinning around the icon's own center */
+.nav-label { display: inline-block; isolation: isolate; position: relative; }
+.nav-icon { --icon-h: 20px; --icon-ratio: 1 / 1; --icon-x: 0px; --icon-y: 0px; --icon-rot: 0deg; aspect-ratio: var(--icon-ratio); height: var(--icon-h); left: 50%; max-width: none; position: absolute; top: 50%; translate: calc(-50% + var(--icon-x)) calc(-50% + var(--icon-y)); rotate: var(--icon-rot); width: auto; z-index: -1; }
+.nursery-cash { --icon-h: 27px; --icon-ratio: 25.9892 / 27.9847; --icon-x: -45.11px; --icon-y: 5px; --icon-rot: -15deg; }
+.nursery-tree { --icon-h: 41px; --icon-ratio: 27.1414 / 41.5905; --icon-x: 36.77px; --icon-y: -12px; }
+.inventory-pot-one { --icon-h: 19px; --icon-ratio: 13.1236 / 19.4692; --icon-x: -46.41px; --icon-y: 9px; }
+.inventory-pot-two { --icon-h: 30px; --icon-ratio: 20.3071 / 30.8188; --icon-x: 53px; --icon-y: 6.5px; --icon-rot: 22deg; }
+.plant-new-grass { --icon-h: 20px; --icon-ratio: 21.2288 / 20.3809; --icon-x: -46.23px; --icon-y: 9px; }
+.plant-new-shovel { --icon-h: 14px; --icon-ratio: 15.6339 / 14.9708; --icon-x: 45.73px; --icon-y: 12px; }
+.me-flower { --icon-h: 21px; --icon-ratio: 24.5379 / 21.3103; --icon-x: 13.74px; --icon-y: 11px; }
+/* Dev overlay: press Shift+D (development only) to outline labels and mark their anchor centers. */
+.show-icon-anchors .nav-label { outline: 1px dashed rgb(220 38 38 / 0.7); outline-offset: 0; }
+.show-icon-anchors .nav-label::after { background: rgb(220 38 38); border-radius: 50%; box-shadow: 0 0 0 1px var(--paper); content: ""; height: 7px; left: 50%; pointer-events: none; position: absolute; top: 50%; translate: -50% -50%; width: 7px; z-index: 2; }
+.show-icon-anchors .nav-icon { outline: 1px solid rgb(37 99 235 / 0.8); }
+.inventory-link { margin-left: clamp(24px, 5.653vw, 81.4px); }
+.plant-new-link { margin-left: clamp(24px, 6.604vw, 95.1px); }
+.me-link { margin-left: clamp(24px, 3.563vw, 51.3px); }
 .garden-canvas { align-items: center; display: flex; flex: 1; justify-content: center; min-height: 0; padding: 40px; }
 .isometric-grid { display: block; height: auto; max-height: calc(100svh - 184px); max-width: min(653px, 100%); transform: translateY(56px); width: min(51vw, 653px); }
-@media (max-width: 900px) { .nursery-link { left: 52%; }.inventory-link { left: 65%; }.plant-new-link { left: 78%; }.me-link { left: 93%; } }
-@media (max-width: 700px) { .garden-home { border-width: 1px; }.garden-header { align-items: flex-start; flex-basis: auto; flex-direction: column; gap: 10px; padding: 17px 18px 14px; }.wordmark { font-size: 40px; left: 18px; position: static; }.garden-navigation { display: flex; gap: 18px; max-width: 100%; overflow-x: auto; padding-bottom: 2px; width: 100%; }.nav-link { font-size: 32px; min-height: 38px; position: relative; top: auto; left: auto; }.nav-link > span:last-child { position: static; }.nav-art { display: none; }.garden-canvas { padding: 24px; }.isometric-grid { max-height: none; transform: none; width: min(100%, 653px); } }
+@media (max-width: 760px) { .garden-home { border-width: 1px; }.garden-header { align-items: flex-start; flex-basis: auto; flex-direction: column; gap: 16px; padding: 17px 18px 16px; }.wordmark { font-size: 40px; left: 18px; position: static; }.garden-navigation { display: flex; flex-wrap: wrap; gap: 28px 44px; justify-content: center; max-width: 100%; padding-bottom: 2px; position: static; width: 100%; }.nav-link { margin-left: 0; top: auto; }.garden-canvas { padding: 24px; }.isometric-grid { max-height: none; transform: none; width: min(100%, 653px); } }
+@media (max-width: 480px) { .garden-navigation { display: grid; gap: 28px 44px; grid-template-columns: repeat(2, max-content); justify-content: center; } }
