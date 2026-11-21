@@ -38,7 +38,7 @@ export default function Home() {
     <main className="garden-home">
       {process.env.NODE_ENV === "development" ? <DevIconAnchors /> : null}
       <header className="garden-header">
-        <p className="wordmark">myPlants</p>
+        <h1 className="sr-only">myPlants</h1>
         <nav aria-label="Primary navigation" className="garden-navigation">
           {navigation.map(({ label, icons, className }) => (
             <button className={`nav-link ${className}`} key={label} type="button">
