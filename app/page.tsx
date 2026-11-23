@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { DevIconAnchors } from "./dev-icon-anchors";
+import { GardenCanvas } from "./garden-canvas";
 
 const navigation = [
   {
@@ -60,9 +61,7 @@ export default function Home() {
           ))}
         </nav>
       </header>
-      <section aria-label="Garden canvas" className="garden-canvas">
-        <Image alt="Isometric garden grid" className="isometric-grid" height={376} priority src="/figma/isometric-surface-grid.svg" width={653} />
-      </section>
+      <GardenCanvas />
     </main>
   );
 }
