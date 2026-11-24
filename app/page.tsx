@@ -1,6 +1,6 @@
 import Image from "next/image";
 import { DevIconAnchors } from "./dev-icon-anchors";
-import { GardenCanvas } from "./garden-canvas";
+import { GardenCanvas } from "./_garden/garden-canvas";
 
 const navigation = [
   {

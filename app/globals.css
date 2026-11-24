@@ -47,18 +47,27 @@ button { font: inherit; }
 .inventory-link { margin-left: clamp(24px, 5.653vw, 81.4px); }
 .plant-new-link { margin-left: clamp(24px, 6.604vw, 95.1px); }
 .me-link { margin-left: clamp(24px, 3.563vw, 51.3px); }
-/* Keep the page usable before the client bundle hydrates on a phone. The
-   non-passive touch listeners in GardenCanvas take control once ready. */
-.garden-canvas { flex: 1; min-height: 0; overflow: hidden; position: relative; touch-action: manipulation; user-select: none; }
-.garden-camera { left: 50%; position: absolute; top: 50%; }
-.isometric-grid { display: block; height: 100%; pointer-events: none; width: 100%; }
-.garden-items-layer { inset: 0; pointer-events: none; position: absolute; }
-.garden-item { position: absolute; translate: -50% -50%; }
-.garden-item img { object-fit: contain; }
+/* Pointer events drive pan, pinch and tap for mouse, pen and touch alike, so
+   the browser must not claim touches for scrolling or page zoom. */
+.garden-canvas { flex: 1; min-height: 0; overflow: hidden; position: relative; touch-action: none; user-select: none; -webkit-user-select: none; }
+.garden-canvas.is-placing { cursor: crosshair; }
+/* The world is a zero-size anchor at the canvas centre. Everything inside is
+   positioned in world pixels; the camera is a single transform written by
+   GardenCanvas. It stays hidden until that first transform is applied. */
+.garden-world { height: 0; left: 50%; position: absolute; top: 50%; transform-origin: 0 0; visibility: hidden; width: 0; }
+.garden-world[data-ready] { visibility: visible; }
+.garden-grid { color: var(--ink); overflow: visible; pointer-events: none; position: absolute; }
+.garden-grid-lines, .garden-grid-border { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1; }
+.garden-tile-highlight { fill: rgb(62 62 62 / 0.14); }
+.garden-tile-highlight.is-occupied { fill: rgb(220 38 38 / 0.16); }
+.garden-plants { inset: 0; pointer-events: none; position: absolute; }
+/* Anchored at the bottom centre: the plant's base stands on its tile. */
+.garden-plant { display: block; max-width: none; position: absolute; translate: -50% -100%; }
 .garden-controls { bottom: 20px; display: flex; gap: 6px; position: absolute; right: 20px; z-index: 2; }
-.garden-control { background: var(--paper); border: 2px solid var(--ink); color: var(--ink); cursor: pointer; font-family: var(--font-hand), cursive; font-size: 28px; line-height: 1; min-height: 40px; min-width: 40px; padding: 3px 8px; }
+.garden-control { background: var(--paper); border: 2px solid var(--ink); color: var(--ink); cursor: pointer; font-family: var(--font-hand), cursive; font-size: 22px; line-height: 1; min-height: 40px; min-width: 40px; padding: 3px 10px; }
+.garden-control[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.garden-control:disabled { cursor: default; opacity: 0.45; }
 .garden-control:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
-.garden-reset { font-size: 22px; padding-inline: 10px; }
 .garden-hint { bottom: 20px; font-family: var(--font-hand), cursive; font-size: 24px; left: 50%; line-height: 40px; margin: 0; pointer-events: none; position: absolute; translate: -50% 0; white-space: nowrap; }
 /* Mobile: the header holds a single row of buttons. The row never wraps;
    instead the nav shrinks its type until the whole composition fits the
@@ -85,7 +94,6 @@ button { font: inherit; }
   }
   .nav-link { margin-left: 0; top: auto; }
   .garden-controls { bottom: 14px; right: 14px; }
-  /* Keep the hint on the same row as the controls; its text is short enough
-     not to collide with the Reset button on narrow screens. */
-  .garden-hint { bottom: 14px; font-size: 21px; line-height: 40px; }
+  /* Three buttons fill the bottom row on a phone, so the hint sits above. */
+  .garden-hint { bottom: 60px; font-size: 21px; left: auto; line-height: 1; right: 14px; translate: none; }
 }
