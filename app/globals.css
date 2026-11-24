@@ -5,9 +5,9 @@
 html, body { min-height: 100%; margin: 0; }
 body { background: var(--paper); color: var(--ink); }
 button { font: inherit; }
-.garden-home { background: var(--paper); border: 2px solid var(--ink); display: flex; flex-direction: column; min-height: 100svh; overflow: hidden; }
+.garden-home { background: var(--paper); border: 2px solid var(--ink); display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }
 .garden-header { align-items: center; border-bottom: 2px solid var(--ink); display: flex; flex: 0 0 101px; padding: 0; position: relative; }
-.nav-link { font-family: var(--font-hand), cursive; font-weight: 400; line-height: 1; }
+.nav-link { font-family: var(--font-hand), cursive; font-weight: 400; line-height: 1; text-decoration: none; }
 /* The nav font size is the single scale knob: its gaps and every icon
    dimension are expressed in em, so changing this one value resizes the whole
    row proportionally. The mobile rule below replaces it with a fluid size. */
@@ -61,14 +61,66 @@ button { font: inherit; }
 .garden-tile-highlight { fill: rgb(62 62 62 / 0.14); }
 .garden-tile-highlight.is-occupied { fill: rgb(220 38 38 / 0.16); }
 .garden-plants { inset: 0; pointer-events: none; position: absolute; }
-/* Anchored at the bottom centre: the plant's base stands on its tile. */
-.garden-plant { display: block; max-width: none; position: absolute; translate: -50% -100%; }
+/* Positioned by GardenCanvas so the art's anchor point sits on the tile centre. */
+.garden-plant { display: block; max-width: none; position: absolute; }
 .garden-controls { bottom: 20px; display: flex; gap: 6px; position: absolute; right: 20px; z-index: 2; }
-.garden-control { background: var(--paper); border: 2px solid var(--ink); color: var(--ink); cursor: pointer; font-family: var(--font-hand), cursive; font-size: 22px; line-height: 1; min-height: 40px; min-width: 40px; padding: 3px 10px; }
+.garden-control { align-items: center; display: inline-flex; justify-content: center; background: var(--paper); border: 2px solid var(--ink); color: var(--ink); cursor: pointer; font-family: var(--font-hand), cursive; font-size: 22px; line-height: 1; min-height: 40px; min-width: 40px; padding: 3px 10px; }
 .garden-control[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
 .garden-control:disabled { cursor: default; opacity: 0.45; }
 .garden-control:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
 .garden-hint { bottom: 20px; font-family: var(--font-hand), cursive; font-size: 24px; left: 50%; line-height: 40px; margin: 0; pointer-events: none; position: absolute; translate: -50% 0; white-space: nowrap; }
+.garden-hint { transition: opacity 0.4s ease; }
+.garden-hint.is-dismissed { opacity: 0; }
+/* The hint names the gesture for the device: pinch on touch screens, scroll
+   with a mouse or trackpad. */
+.hint-touch { display: none; }
+@media (pointer: coarse) {
+  .hint-touch { display: inline; }
+  .hint-mouse { display: none; }
+}
+/* Plant New page. Sizes follow the Figma frame (402px wide). The page never
+   scrolls: the drawing stage shrinks to fit shorter screens, and the gaps
+   tighten. Overflow scrolling is only a last resort for tiny landscape
+   phones where nothing else can fit. */
+.plant-creator { align-items: center; display: flex; flex: 1; flex-direction: column; font-family: var(--font-hand), cursive; justify-content: center; min-height: 0; overflow-y: auto; padding: clamp(10px, 2.5svh, 28px) 16px clamp(14px, 3svh, 32px); }
+.creator-instructions { flex: none; font-size: 22px; line-height: 1.1; text-align: center; }
+.creator-instructions p { margin: 0; }
+.creator-dot-line { align-items: center; display: flex; gap: 15px; justify-content: center; }
+.creator-dot { display: block; }
+.creator-stage { flex: 0 1 278.315px; margin-top: clamp(8px, 2svh, 20px); max-width: 308.174px; min-height: 120px; width: 100%; }
+/* Fills the stage; the viewBox keeps the drawing's proportions inside it. */
+.drawing-stage { display: block; height: 100%; overflow: visible; width: 100%; }
+/* Drawing needs every touch: no scrolling or zooming the page while drawing. */
+.drawing-stage:not(.drawing-preview) { cursor: crosshair; touch-action: none; user-select: none; -webkit-user-select: none; }
+.drawing-stage.is-erasing { cursor: cell; }
+.creator-tools { display: flex; flex: none; gap: 12.25px; margin-top: clamp(10px, 2.5svh, 23px); }
+.creator-button { align-items: center; background: transparent; border: 1px solid var(--ink); color: var(--ink); cursor: pointer; display: inline-flex; font-family: var(--font-hand), cursive; font-size: 28px; height: 41.03px; justify-content: center; line-height: 1; padding: 0; text-decoration: none; }
+/* Just Another Hand draws its letters about 0.13em above the middle of the
+   line box (measured: glyphs span 0.01em to 0.73em of a 1em line). Padding
+   the top by twice that centres the visible letters in their box, in every
+   browser. Use the same nudge for any boxed text in this font. */
+.creator-text-button { padding-top: 0.26em; }
+.garden-control { padding-bottom: 3px; padding-top: calc(3px + 0.26em); }
+.creator-button:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.creator-button:disabled { cursor: default; opacity: 0.4; }
+.creator-button[aria-pressed="true"] { background: rgb(62 62 62 / 0.12); box-shadow: inset 0 0 0 1px var(--ink); }
+.creator-icon-button { width: 41.03px; }
+.creator-icon-button img { display: block; }
+.creator-text-button { width: 128.46px; }
+.creator-name { display: flex; flex: none; flex-direction: column; margin-top: clamp(10px, 2.5svh, 23px); max-width: 100%; width: 312.59px; }
+.creator-name input { background: transparent; border: 1px solid var(--ink); border-radius: 0; color: var(--ink); font: inherit; font-size: 28px; height: 41.03px; line-height: 1; padding: 0.26em 18.58px 0; width: 100%; }
+.creator-name input::placeholder { color: var(--ink); opacity: 1; }
+/* Focus thickens the border inward, so nothing spills onto the counter. */
+.creator-name input:focus-visible { box-shadow: inset 0 0 0 1px var(--ink); outline: none; }
+.creator-count { align-self: flex-end; font-size: 15px; line-height: 1; margin-right: 6.5px; margin-top: 6px; }
+/* The flower pokes 44px above the buttons, so this gap must stay above that. */
+.creator-actions { display: flex; flex: none; gap: 13.75px; margin-top: 52px; position: relative; }
+.creator-actions .creator-button { position: relative; z-index: 1; }
+.creator-discard { background: var(--paper); }
+.creator-create { background: var(--ink); color: var(--paper); }
+/* Solid rather than faded, so the flower behind it does not show through. */
+.creator-create:disabled { background: color-mix(in srgb, var(--ink) 40%, var(--paper)); border-color: color-mix(in srgb, var(--ink) 40%, var(--paper)); opacity: 1; }
+.creator-flower { left: 224.17px; pointer-events: none; position: absolute; top: -44.17px; z-index: 0; }
 /* Mobile: the header holds a single row of buttons. The row never wraps;
    instead the nav shrinks its type until the whole composition fits the
    viewport width.

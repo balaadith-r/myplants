@@ -15,21 +15,21 @@ import {
   type Camera,
   type Size,
 } from "./camera";
-import { gardenItems, placeholderPlants, type GardenItem } from "./garden-data";
+import { gardenItems, placeholderPlants, type GardenItem, type PlantArt } from "./garden-data";
 import { sameTile, tileCenter, tileDepth, tileKey, worldToTile, type GardenTile, type Point } from "./geometry";
 import { GridLayer } from "./grid-layer";
-import { useShowGrid } from "./use-show-grid";
+import { inventoryArt, useInventory } from "./inventory";
+import { hintDismissedFlag, showGridFlag } from "./stored-flag";
 
 // How far a pointer may move, in screen px, and still count as a tap.
 const TAP_SLOP = 8;
-// Plants stand a little below the tile centre so their base sits mid-tile.
-const PLANT_BASE_OFFSET = 10;
 
 type Pinch = { camera: Camera; distance: number; midpoint: Point };
 type Tap = { pointerId: number; start: Point };
 
 function PlantSprite({ item }: { item: GardenItem }) {
   const base = tileCenter(item.tile);
+  const { anchor, height, width } = item.art;
   return (
     // Plants are plain images positioned in world pixels; the camera transform
     // scales them, so they never re-render while panning or zooming.
@@ -38,10 +38,10 @@ function PlantSprite({ item }: { item: GardenItem }) {
       alt={item.art.alt}
       className="garden-plant"
       draggable={false}
-      height={item.art.height}
+      height={height}
       src={item.art.src}
-      style={{ left: base.x, top: base.y + PLANT_BASE_OFFSET }}
-      width={item.art.width}
+      style={{ height, left: base.x - anchor.x * width, top: base.y - anchor.y * height, width }}
+      width={width}
     />
   );
 }
@@ -78,7 +78,9 @@ export function GardenCanvas({ initialItems = gardenItems }: { initialItems?: Ga
   const [items, setItems] = useState(initialItems);
   const [placing, setPlacing] = useState(false);
   const [hoverTile, setHoverTile] = useState<GardenTile | null>(null);
-  const [showGrid, setShowGrid] = useShowGrid();
+  const showGrid = showGridFlag.useValue();
+  const hintDismissed = hintDismissedFlag.useValue();
+  const inventory = useInventory();
 
   const occupied = useMemo(() => new Set(items.map((item) => tileKey(item.tile))), [items]);
 
@@ -91,6 +93,14 @@ export function GardenCanvas({ initialItems = gardenItems }: { initialItems?: Ga
       frameRef.current = 0;
       if (worldRef.current) worldRef.current.style.transform = cameraTransform(cameraRef.current);
     });
+  }, []);
+
+  // The first pan or zoom stops the camera refitting on resize and retires
+  // the how-to hint for good.
+  const markInteracted = useCallback(() => {
+    if (hasInteractedRef.current) return;
+    hasInteractedRef.current = true;
+    if (!hintDismissedFlag.get()) hintDismissedFlag.set(true);
   }, []);
 
   /** Client coordinates to screen coordinates measured from the canvas centre. */
@@ -112,10 +122,12 @@ export function GardenCanvas({ initialItems = gardenItems }: { initialItems?: Ga
     if (!canvas || !world) return;
 
     // Fit before the first paint. The world stays hidden until this runs, so
-    // a phone never flashes the server-rendered, unfitted grid.
+    // a phone never flashes the server-rendered, unfitted grid. This also
+    // re-runs when Next.js shows this page again after navigating back; a
+    // camera the viewer moved is kept then, just re-clamped.
     const bounds = canvas.getBoundingClientRect();
     sizeRef.current = { width: bounds.width, height: bounds.height };
-    cameraRef.current = fittedCamera(sizeRef.current);
+    cameraRef.current = hasInteractedRef.current ? clampCamera(cameraRef.current, sizeRef.current) : fittedCamera(sizeRef.current);
     world.style.transform = cameraTransform(cameraRef.current);
     world.dataset.ready = "";
 
@@ -140,7 +152,7 @@ export function GardenCanvas({ initialItems = gardenItems }: { initialItems?: Ga
 
     function handleWheel(event: WheelEvent) {
       event.preventDefault();
-      hasInteractedRef.current = true;
+      markInteracted();
 
       // Firefox reports mouse wheels in lines or pages rather than pixels.
       const unit =
@@ -155,7 +167,7 @@ export function GardenCanvas({ initialItems = gardenItems }: { initialItems?: Ga
 
     canvas.addEventListener("wheel", handleWheel, { passive: false });
     return () => canvas.removeEventListener("wheel", handleWheel);
-  }, [canvasPoint, setCamera]);
+  }, [canvasPoint, markInteracted, setCamera]);
 
   useEffect(() => {
     if (!placing) return;
@@ -170,7 +182,7 @@ export function GardenCanvas({ initialItems = gardenItems }: { initialItems?: Ga
   }, [placing]);
 
   function pan(dx: number, dy: number) {
-    hasInteractedRef.current = true;
+    markInteracted();
     const current = cameraRef.current;
     setCamera({ ...current, x: current.x + dx, y: current.y + dy });
   }
@@ -186,8 +198,10 @@ export function GardenCanvas({ initialItems = gardenItems }: { initialItems?: Ga
       return;
     }
 
-    // TEMPORARY: cycles through placeholder doodles until the inventory exists.
-    const art = placeholderPlants[nextPlaceholderRef.current++ % placeholderPlants.length];
+    // TEMPORARY: until there is an inventory picker, cycle through the
+    // player's drawn plants, or the placeholder doodles if they have none.
+    const choices: PlantArt[] = inventory.length > 0 ? inventory.map(inventoryArt) : placeholderPlants;
+    const art = choices[nextPlaceholderRef.current++ % choices.length];
     setItems((current) => [...current, { id: key, tile, art }]);
   }
 
@@ -232,7 +246,7 @@ export function GardenCanvas({ initialItems = gardenItems }: { initialItems?: Ga
       const center = midpoint(first, second);
       const scale = clamp(pinch.camera.scale * (distance(first, second) / pinch.distance), minScale(sizeRef.current), MAX_SCALE);
       const zoomed = zoomAt(pinch.camera, scale, pinch.midpoint);
-      hasInteractedRef.current = true;
+      markInteracted();
       setCamera({ scale, x: zoomed.x + center.x - pinch.midpoint.x, y: zoomed.y + center.y - pinch.midpoint.y });
       return;
     }
@@ -308,7 +322,7 @@ export function GardenCanvas({ initialItems = gardenItems }: { initialItems?: Ga
           aria-pressed={showGrid}
           className="garden-control"
           disabled={placing}
-          onClick={() => setShowGrid(!showGrid)}
+          onClick={() => showGridFlag.set(!showGrid)}
           title={placing ? "The grid is always shown while planting" : undefined}
           type="button"
         >
@@ -321,7 +335,16 @@ export function GardenCanvas({ initialItems = gardenItems }: { initialItems?: Ga
           Reset
         </button>
       </div>
-      <p className="garden-hint">{placing ? "Tap a tile to plant · Tap again to remove" : "Drag or pinch · Scroll to zoom"}</p>
+      {placing ? (
+        <p className="garden-hint">Tap a tile to plant · Tap again to remove</p>
+      ) : (
+        // Shown until the viewer first pans or zooms. Both wordings are
+        // rendered; CSS picks the one for a touch screen or a mouse.
+        <p aria-hidden={hintDismissed} className={hintDismissed ? "garden-hint is-dismissed" : "garden-hint"}>
+          <span className="hint-touch">Drag to move · Pinch to zoom</span>
+          <span className="hint-mouse">Drag to move · Scroll to zoom</span>
+        </p>
+      )}
     </section>
   );
 }
