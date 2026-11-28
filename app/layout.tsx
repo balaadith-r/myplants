@@ -9,7 +9,8 @@ const handFont = Just_Another_Hand({
 });
 
 export const metadata: Metadata = {
-  title: "Placeholder",
+  // Other pages show as "Inventory · doodlegarden" and so on.
+  title: { default: "doodlegarden", template: "%s · doodlegarden" },
   description: "A hand-drawn isometric garden.",
 };
 
