@@ -140,3 +140,38 @@ export function drawingToSvg(strokes: Stroke[]) {
 export function hasInk(strokes: Stroke[]) {
   return strokes.some((stroke) => stroke.tool === "pen");
 }
+
+/** A rectangle in box units. */
+export type Bounds = { x: number; y: number; width: number; height: number };
+
+export const FULL_BOX: Bounds = { x: 0, y: 0, width: BOX.width, height: BOX.height };
+
+/**
+ * The rectangle around the pen strokes, including the line width, in box
+ * units. Cards use it to frame the drawing instead of the empty box around it.
+ * Each curve stays inside its points (they are its control points), so the
+ * points alone are enough.
+ */
+export function inkBounds(strokes: Stroke[]): Bounds {
+  let left = Infinity;
+  let top = Infinity;
+  let right = -Infinity;
+  let bottom = -Infinity;
+  for (const stroke of strokes) {
+    if (stroke.tool !== "pen") continue;
+    for (let i = 0; i < stroke.points.length; i += 2) {
+      left = Math.min(left, stroke.points[i]);
+      right = Math.max(right, stroke.points[i]);
+      top = Math.min(top, stroke.points[i + 1]);
+      bottom = Math.max(bottom, stroke.points[i + 1]);
+    }
+  }
+  if (left === Infinity) return FULL_BOX;
+
+  const pad = PEN_WIDTH / 2;
+  left = Math.max(0, left - pad);
+  top = Math.max(0, top - pad);
+  right = Math.min(BOX.width, right + pad);
+  bottom = Math.min(BOX.height, bottom + pad);
+  return { x: round(left), y: round(top), width: round(right - left), height: round(bottom - top) };
+}

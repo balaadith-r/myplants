@@ -50,7 +50,7 @@ button { font: inherit; }
 /* Pointer events drive pan, pinch and tap for mouse, pen and touch alike, so
    the browser must not claim touches for scrolling or page zoom. */
 .garden-canvas { flex: 1; min-height: 0; overflow: hidden; position: relative; touch-action: none; user-select: none; -webkit-user-select: none; }
-.garden-canvas.is-placing { cursor: crosshair; }
+.garden-canvas.is-editing { cursor: crosshair; }
 /* The world is a zero-size anchor at the canvas centre. Everything inside is
    positioned in world pixels; the camera is a single transform written by
    GardenCanvas. It stays hidden until that first transform is applied. */
@@ -59,11 +59,18 @@ button { font: inherit; }
 .garden-grid { color: var(--ink); overflow: visible; pointer-events: none; position: absolute; }
 .garden-grid-lines, .garden-grid-border { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1; }
 .garden-tile-highlight { fill: rgb(62 62 62 / 0.14); }
-.garden-tile-highlight.is-occupied { fill: rgb(220 38 38 / 0.16); }
 .garden-plants { inset: 0; pointer-events: none; position: absolute; }
 /* Positioned by GardenCanvas so the art's anchor point sits on the tile centre. */
-.garden-plant { display: block; max-width: none; position: absolute; }
-.garden-controls { bottom: 20px; display: flex; gap: 6px; position: absolute; right: 20px; z-index: 2; }
+.garden-plant { display: block; max-width: none; position: absolute; transition: opacity 0.2s ease; }
+/* While a plant is selected in edit mode, the others fade back. While a plant
+   from "Use" waits for a tile, every plant does. */
+.garden-plant.is-dimmed { opacity: 0.3; }
+/* The inventory, opened over the garden to choose a plant for a tile. */
+.garden-picker { display: flex; flex-direction: column; inset: 0; position: absolute; z-index: 3; }
+/* Bottom right: Edit and Reset, with the selected tile's options (Stash and
+   Replace, or Add plant) in a row right above them. */
+.garden-controls { align-items: flex-end; bottom: 20px; display: flex; flex-direction: column; gap: 6px; position: absolute; right: 20px; z-index: 2; }
+.garden-controls-row { display: flex; gap: 6px; }
 .garden-control { align-items: center; display: inline-flex; justify-content: center; background: var(--paper); border: 2px solid var(--ink); color: var(--ink); cursor: pointer; font-family: var(--font-hand), cursive; font-size: 22px; line-height: 1; min-height: 40px; min-width: 40px; padding: 3px 10px; }
 .garden-control[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
 .garden-control:disabled { cursor: default; opacity: 0.45; }
@@ -146,6 +153,110 @@ button { font: inherit; }
   }
   .nav-link { margin-left: 0; top: auto; }
   .garden-controls { bottom: 14px; right: 14px; }
-  /* Three buttons fill the bottom row on a phone, so the hint sits above. */
+  /* The buttons fill the bottom row on a phone, so the hint sits above. It is
+     hidden while a tile is selected, when its options take that spot. */
   .garden-hint { bottom: 60px; font-size: 21px; left: auto; line-height: 1; right: 14px; translate: none; }
 }
+/* Rarity colours, from the Figma inventory design. The two dark ones take
+   paper-coloured text. Ultra Legendary cycles through the colour wheel where
+   motion is allowed; its static colour is the fallback everywhere else. */
+:root { --rarity-abysmal: #a3421f; --rarity-common: #7cdb69; --rarity-rare: #67abff; --rarity-mythic: #ff2c2f; --rarity-legendary: #ffeb38; --rarity-ultra-legendary: #c3ff98; }
+/* A highlighter swipe behind the rarity name. Sized in em so it works at any
+   font size: 18.57px tall and 2px above the letters at the card's 20px. The
+   negative margins keep it from pushing the line down or the word right. */
+.rarity-mark { color: var(--ink); display: inline-block; height: 0.928em; margin: -0.1em 0 0 -0.1em; padding: 0.1em 0.075em 0; }
+.rarity-abysmal { background: var(--rarity-abysmal); color: var(--paper); }
+.rarity-common { background: var(--rarity-common); }
+.rarity-rare { background: var(--rarity-rare); }
+.rarity-mythic { background: var(--rarity-mythic); color: var(--paper); }
+.rarity-legendary { background: var(--rarity-legendary); }
+.rarity-ultra-legendary { background: var(--rarity-ultra-legendary); }
+/* The cycle starts from a stronger green than the static colour, which looks
+   pale next to the moving one. Text flips to paper over the darker hues. */
+@keyframes rarity-cycle {
+  0%, 100% { background-color: hsl(100 100% 55%); }
+  16.67% { background-color: hsl(170 100% 50%); }
+  33.33% { background-color: hsl(225 100% 62%); }
+  50% { background-color: hsl(290 100% 60%); }
+  66.67% { background-color: hsl(355 100% 60%); }
+  83.33% { background-color: hsl(48 100% 55%); }
+}
+@keyframes rarity-cycle-text {
+  0% { color: var(--ink); }
+  26% { color: var(--paper); }
+  76% { color: var(--ink); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .rarity-ultra-legendary { animation: rarity-cycle 6s linear infinite, rarity-cycle-text 6s step-end infinite; }
+}
+/* Inventory page. Sizes follow the Figma frame (402px wide). Like Plant New it
+   never scrolls: the grid shows as many cards as fit and pages the rest. */
+.inventory { display: flex; flex: 1; flex-direction: column; font-family: var(--font-hand), cursive; isolation: isolate; min-height: 0; position: relative; }
+/* The same view, laid over the garden when choosing a plant for a tile. */
+.inventory.is-picking { background: var(--paper); }
+.inventory-toolbar { align-items: center; display: flex; flex: none; gap: 12px; justify-content: space-between; margin-bottom: 1.26px; min-height: 31.26px; padding: 4.16px 14.57px 0; }
+.inventory-filter { position: relative; }
+/* Back, from the Figma toolbar: a small boxed "back" on the right. A link home
+   on the Inventory page, a button that closes the picker over the garden; flex
+   centring makes the two look the same. The ::after widens what a finger can
+   hit without changing the look. */
+.inventory-back { align-items: center; background: var(--paper); border: 1px solid var(--ink); color: var(--ink); cursor: pointer; display: flex; flex: none; font-family: inherit; font-size: 20px; height: 24.21px; justify-content: center; line-height: 1; margin: -4.8px -4.87px 0 auto; padding: 0.26em 0 0; position: relative; text-decoration: none; width: 52.31px; }
+.inventory-back::after { content: ""; inset: -10px -8px; position: absolute; }
+.inventory-back:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.inventory-filter-button { align-items: flex-start; background: none; border: 0; color: var(--ink); cursor: pointer; display: inline-flex; font-family: inherit; font-size: 24px; gap: 3.77px; line-height: 1; padding: 0; }
+.inventory-filter-button:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.inventory-filter-icon { align-items: center; border: 1px solid var(--ink); display: inline-flex; flex: none; height: 24.21px; justify-content: center; margin-top: -3.1px; width: 24.31px; }
+.inventory-filter-icon img { display: block; }
+.inventory-menu { background: var(--paper); border: 1px solid var(--ink); box-shadow: 0 4px 4px rgb(0 0 0 / 0.25); display: flex; flex-direction: column; left: 0; min-width: 150px; padding: 4px; position: absolute; top: calc(100% + 8px); z-index: 4; }
+.inventory-menu-item { background: none; border: 0; color: var(--ink); cursor: pointer; font-family: inherit; font-size: 24px; line-height: 1; padding: calc(6px + 0.26em) 10px 6px; text-align: left; }
+.inventory-menu-item:hover { background: rgb(62 62 62 / 0.1); }
+.inventory-menu-item[aria-checked="true"] { background: var(--ink); color: var(--paper); }
+.inventory-menu-item:focus-visible { outline: 2px solid var(--ink); outline-offset: -4px; }
+.inventory-area { flex: 1; min-height: 0; padding: 0 9.3px; }
+/* --u is one Figma pixel at the card's current size; cards and their action
+   buttons are sized in it, so they shrink together on narrow phones. Each cell
+   is a size container, so 100cqw is one card's width. */
+.inventory-grid { --u: calc(100cqw / 186.535); column-gap: calc(var(--card-width) * 0.0446); display: grid; justify-content: center; list-style: none; margin: 0; padding: 0; row-gap: calc(var(--card-width) * 0.0955); }
+.inventory-cell { container-type: inline-size; position: relative; }
+.inventory-cell.is-selected { z-index: 3; }
+.inventory-card-button { background: none; border: 0; color: inherit; cursor: pointer; display: block; font: inherit; padding: 0; text-align: inherit; width: 100%; }
+.inventory-card-button:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+/* Text boxes use line-height 1, whose top matches the top of a Figma text box
+   in this font, so the margins below are the Figma gaps. */
+.plant-card { aspect-ratio: 186.535 / 204.098; background: var(--paper); border: 2px solid var(--ink); box-shadow: 0 4px 4px rgb(0 0 0 / 0.25); color: var(--ink); display: flex; flex-direction: column; padding: calc(3.61 * var(--u)) calc(3.27 * var(--u)) 0; width: 100%; }
+.plant-card-frame { border: 1px solid var(--ink); display: block; flex: none; height: calc(111.012 * var(--u)); overflow: hidden; position: relative; }
+.plant-card-art { display: block; max-width: none; pointer-events: none; position: absolute; }
+.plant-card-name { display: block; font-size: calc(32 * var(--u)); line-height: 1; margin-top: calc(4.77 * var(--u)); overflow: hidden; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.plant-card-details { display: grid; font-size: calc(20 * var(--u)); grid-template-columns: minmax(0, 1fr) calc(57.81 * var(--u)); line-height: 1; margin-top: calc(2.28 * var(--u)); padding: 0 calc(3.57 * var(--u)); row-gap: calc(1.7 * var(--u)); }
+.plant-card-rarity { grid-column: 1; grid-row: 1; white-space: nowrap; }
+.plant-card-artist { grid-column: 1; grid-row: 2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plant-card-signature { grid-column: 2; grid-row: 1 / span 2; height: calc(37.42 * var(--u)); }
+.plant-card-signature img { display: block; height: 100%; object-fit: contain; width: 100%; }
+/* Use and Delete sit beside the selected card, above the blur. */
+.inventory-actions { display: flex; gap: calc(5 * var(--u)); left: calc(100% + 20.47 * var(--u)); position: absolute; top: 50%; translate: 0 -50%; }
+.inventory-actions.is-left { left: auto; right: calc(100% + 20.47 * var(--u)); }
+.inventory-action { align-items: center; border: 0; cursor: pointer; display: inline-flex; flex: none; font-family: var(--font-hand), cursive; height: calc(60 * var(--u)); justify-content: center; line-height: 1; padding: 0.26em 0 0; position: relative; }
+.inventory-action:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.inventory-use, .inventory-delete { background: var(--ink); box-shadow: 0 4px 4px rgb(0 0 0 / 0.25); color: var(--paper); font-size: calc(45 * var(--u)); width: calc(117 * var(--u)); }
+.inventory-delete { font-size: calc(36 * var(--u)); width: calc(92 * var(--u)); }
+.inventory-keep { background: var(--paper); border: 2px solid var(--ink); box-shadow: 0 4px 4px rgb(0 0 0 / 0.25); color: var(--ink); font-size: calc(32 * var(--u)); width: calc(64 * var(--u)); }
+.inventory-trash { background: none; padding: 0; width: calc(39 * var(--u)); }
+/* The Figma box art includes its drop shadow, so it overhangs the button. */
+.inventory-trash-box { height: 113.33%; left: -10.26%; max-width: none; position: absolute; top: 0; width: 120.51%; }
+.inventory-trash-icon { height: auto; position: relative; width: calc(20.75 * var(--u)); }
+.inventory-veil { -webkit-backdrop-filter: blur(7.5px); backdrop-filter: blur(7.5px); background: rgb(187 187 187 / 0.12); inset: 0; position: absolute; z-index: 2; }
+.inventory-pager { align-items: center; display: flex; flex: none; justify-content: space-between; margin-top: 14.6px; padding: 0 33.37px clamp(12px, 3svh, 28px); }
+.inventory-pager.is-hidden { visibility: hidden; }
+.inventory-page-button { background: none; border: 0; cursor: pointer; display: block; padding: 0; }
+.inventory-page-button img { display: block; }
+.inventory-page-button:disabled { cursor: default; opacity: 0.35; }
+.inventory-page-button:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.inventory-dots { align-items: center; display: flex; gap: 11.15px; }
+.inventory-dot { background: var(--ink); border-radius: 50%; height: 6.015px; opacity: 0.5; width: 6.015px; }
+.inventory-dot.is-current { opacity: 1; }
+.inventory-page-count { font-size: 22px; padding-top: 0.26em; }
+/* Centred on the whole screen, as in the design, not just the space below the header. */
+.inventory-empty { align-items: center; display: flex; flex-direction: column; font-size: 36px; inset: 0; justify-content: center; line-height: 1; padding-bottom: 101px; pointer-events: none; position: absolute; text-transform: uppercase; }
+.inventory-empty p { margin: 0; }
+.inventory-empty a { color: inherit; pointer-events: auto; text-decoration: none; }
+.inventory-empty a:hover, .inventory-empty a:focus-visible { text-decoration: underline; }

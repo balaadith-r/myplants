@@ -26,14 +26,13 @@ type GridLayerProps = {
   /** Inner tile lines. The outer border is always drawn. */
   showLines: boolean;
   highlight: GardenTile | null;
-  highlightOccupied: boolean;
 };
 
 /**
  * The grid is drawn in world pixels, so the SVG's viewBox equals its own
  * position in the world: no coordinate conversion is needed anywhere.
  */
-export const GridLayer = memo(function GridLayer({ showLines, highlight, highlightOccupied }: GridLayerProps) {
+export const GridLayer = memo(function GridLayer({ showLines, highlight }: GridLayerProps) {
   const left = GRID_BOUNDS.left - PAD;
   const top = GRID_BOUNDS.top - PAD;
   const width = GRID_BOUNDS.width + PAD * 2;
@@ -50,7 +49,7 @@ export const GridLayer = memo(function GridLayer({ showLines, highlight, highlig
     >
       {highlight ? (
         <polygon
-          className={highlightOccupied ? "garden-tile-highlight is-occupied" : "garden-tile-highlight"}
+          className="garden-tile-highlight"
           points={diamondPoints(highlight.column, highlight.row, highlight.column + 1, highlight.row + 1)}
         />
       ) : null}

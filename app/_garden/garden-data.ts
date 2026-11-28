@@ -13,25 +13,10 @@ export type PlantArt = {
   anchor: { x: number; y: number };
 };
 
+/** One planted tile. The same plant can stand on several tiles. */
 export type GardenItem = {
+  /** Unique per tile, not per plant. */
   id: string;
   tile: GardenTile;
   art: PlantArt;
 };
-
-/**
- * Add persisted plants here for now. Eventually this is supplied by the garden
- * API, still in tile coordinates. Draw order is worked out from the tile, so
- * there is no z-index to maintain.
- */
-export const gardenItems: GardenItem[] = [];
-
-/**
- * TEMPORARY: stand-in doodles for testing placement. Planting mode uses the
- * player's drawn plants when there are any, and these otherwise.
- */
-export const placeholderPlants: PlantArt[] = [
-  { alt: "Placeholder tulip", src: "/placeholders/doodle-tulip.svg", width: 80, height: 130, anchor: { x: 0.5, y: 0.923 } },
-  { alt: "Placeholder grass", src: "/placeholders/doodle-grass.svg", width: 90, height: 120, anchor: { x: 0.5, y: 0.917 } },
-  { alt: "Placeholder daisy", src: "/placeholders/doodle-daisy.svg", width: 80, height: 140, anchor: { x: 0.5, y: 0.929 } },
-];

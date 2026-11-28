@@ -15,11 +15,14 @@ import {
   type Camera,
   type Size,
 } from "./camera";
-import { gardenItems, placeholderPlants, type GardenItem, type PlantArt } from "./garden-data";
+import { inventoryArt, useInventory, type InventoryPlant } from "../_inventory/inventory";
+import { InventoryView } from "../_inventory/inventory-view";
+import { useResetOnLeave } from "../_lib/reset-on-leave";
+import type { GardenItem } from "./garden-data";
 import { sameTile, tileCenter, tileDepth, tileKey, worldToTile, type GardenTile, type Point } from "./geometry";
 import { GridLayer } from "./grid-layer";
-import { inventoryArt, useInventory } from "./inventory";
-import { hintDismissedFlag, showGridFlag } from "./stored-flag";
+import { pendingPlant, plantOnTile, stashTile, usePlacements } from "./layout";
+import { hintDismissedFlag } from "./stored-flag";
 
 // How far a pointer may move, in screen px, and still count as a tap.
 const TAP_SLOP = 8;
@@ -27,43 +30,65 @@ const TAP_SLOP = 8;
 type Pinch = { camera: Camera; distance: number; midpoint: Point };
 type Tap = { pointerId: number; start: Point };
 
-function PlantSprite({ item }: { item: GardenItem }) {
+function applyCamera(world: HTMLElement, camera: Camera) {
+  world.style.transform = cameraTransform(camera);
+  // Lets UI placed in the world, such as things shown under a selected plant,
+  // divide by the zoom to keep its size on screen.
+  world.style.setProperty("--zoom", String(camera.scale));
+}
+
+/** Keeps the garden's pan, pinch and taps away from UI laid over it. */
+function stopPropagation(event: React.SyntheticEvent) {
+  event.stopPropagation();
+}
+
+/** Where a plant's art sits in the world: its anchor on the tile centre. */
+function spriteOrigin(item: GardenItem): Point {
   const base = tileCenter(item.tile);
-  const { anchor, height, width } = item.art;
+  return { x: base.x - item.art.anchor.x * item.art.width, y: base.y - item.art.anchor.y * item.art.height };
+}
+
+/** Nearer tiles (higher column + row) are drawn later, over the plants behind. */
+function drawOrder(a: GardenItem, b: GardenItem) {
+  return tileDepth(a.tile) - tileDepth(b.tile) || a.tile.column - b.tile.column;
+}
+
+function PlantSprite({ item, dimmed }: { item: GardenItem; dimmed: boolean }) {
+  const origin = spriteOrigin(item);
+  const { height, width } = item.art;
   return (
     // Plants are plain images positioned in world pixels; the camera transform
     // scales them, so they never re-render while panning or zooming.
     // eslint-disable-next-line @next/next/no-img-element
     <img
       alt={item.art.alt}
-      className="garden-plant"
+      className={dimmed ? "garden-plant is-dimmed" : "garden-plant"}
       draggable={false}
       height={height}
       src={item.art.src}
-      style={{ height, left: base.x - anchor.x * width, top: base.y - anchor.y * height, width }}
+      style={{ height, left: origin.x, top: origin.y, width }}
       width={width}
     />
   );
 }
 
-const PlantLayer = memo(function PlantLayer({ items }: { items: GardenItem[] }) {
-  // Nearer tiles (higher column + row) are drawn later so they overlap the
-  // plants behind them. Ties sit side by side, so any stable order works.
-  const sorted = useMemo(
-    () => [...items].sort((a, b) => tileDepth(a.tile) - tileDepth(b.tile) || a.tile.column - b.tile.column),
-    [items],
-  );
+/**
+ * `focusId` is the selected plant while editing; every other plant fades back.
+ * While a plant from "Use" waits for a tile, they all do.
+ */
+const PlantLayer = memo(function PlantLayer({ items, focusId, placing }: { items: GardenItem[]; focusId: string | null; placing: boolean }) {
+  const sorted = useMemo(() => [...items].sort(drawOrder), [items]);
 
   return (
     <div className="garden-plants">
       {sorted.map((item) => (
-        <PlantSprite item={item} key={item.id} />
+        <PlantSprite dimmed={placing || (focusId !== null && item.id !== focusId)} item={item} key={item.id} />
       ))}
     </div>
   );
 });
 
-export function GardenCanvas({ initialItems = gardenItems }: { initialItems?: GardenItem[] }) {
+export function GardenCanvas() {
   const canvasRef = useRef<HTMLElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
   const sizeRef = useRef<Size>({ width: 0, height: 0 });
@@ -73,16 +98,32 @@ export function GardenCanvas({ initialItems = gardenItems }: { initialItems?: Ga
   const pointersRef = useRef(new Map<number, Point>());
   const pinchRef = useRef<Pinch | null>(null);
   const tapRef = useRef<Tap | null>(null);
-  const nextPlaceholderRef = useRef(0);
 
-  const [items, setItems] = useState(initialItems);
-  const [placing, setPlacing] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [hoverTile, setHoverTile] = useState<GardenTile | null>(null);
-  const showGrid = showGridFlag.useValue();
+  /** The tile tapped in edit mode, empty or planted. It stays highlighted. */
+  const [selectedTile, setSelectedTile] = useState<GardenTile | null>(null);
+  /** The tile a plant is being chosen for, while the inventory is open. */
+  const [pickerTile, setPickerTile] = useState<GardenTile | null>(null);
   const hintDismissed = hintDismissedFlag.useValue();
-  const inventory = useInventory();
+  const plants = useInventory();
+  const placements = usePlacements();
+  const pendingId = pendingPlant.useValue();
 
-  const occupied = useMemo(() => new Set(items.map((item) => tileKey(item.tile))), [items]);
+  const items = useMemo(() => {
+    const byId = new Map(plants.map((plant) => [plant.id, plant]));
+    return placements.flatMap(({ plantId, tile }): GardenItem[] => {
+      const plant = byId.get(plantId);
+      return plant ? [{ id: tileKey(tile), tile, art: inventoryArt(plant) }] : [];
+    });
+  }, [plants, placements]);
+
+  // A plant chosen with "Use" on the Inventory page waits here for a tile.
+  // That also opens edit mode, and the next tile tapped gets it.
+  const placingPlant = pendingId ? (plants.find((plant) => plant.id === pendingId) ?? null) : null;
+  const isEditing = editing || placingPlant !== null;
+  const activeTile = isEditing && !placingPlant ? selectedTile : null;
+  const selectedItem = activeTile ? (items.find((item) => sameTile(item.tile, activeTile)) ?? null) : null;
 
   // The camera lives in a ref and is written to the DOM at most once per
   // frame. Panning and zooming never re-render React.
@@ -91,7 +132,7 @@ export function GardenCanvas({ initialItems = gardenItems }: { initialItems?: Ga
     if (frameRef.current) return;
     frameRef.current = requestAnimationFrame(() => {
       frameRef.current = 0;
-      if (worldRef.current) worldRef.current.style.transform = cameraTransform(cameraRef.current);
+      if (worldRef.current) applyCamera(worldRef.current, cameraRef.current);
     });
   }, []);
 
@@ -110,6 +151,11 @@ export function GardenCanvas({ initialItems = gardenItems }: { initialItems?: Ga
     return { x: clientX - (bounds.left + bounds.width / 2), y: clientY - (bounds.top + bounds.height / 2) };
   }, []);
 
+  /**
+   * The tile under a screen point. Taps and hovers only ever go by tile, never
+   * by a plant's drawing, which rises over the tiles behind it and would make
+   * them hard to reach.
+   */
   const tileAt = (point: Point) => worldToTile(screenToWorld(point, cameraRef.current));
 
   const updateHover = (tile: GardenTile | null) => {
@@ -123,12 +169,13 @@ export function GardenCanvas({ initialItems = gardenItems }: { initialItems?: Ga
 
     // Fit before the first paint. The world stays hidden until this runs, so
     // a phone never flashes the server-rendered, unfitted grid. This also
-    // re-runs when Next.js shows this page again after navigating back; a
-    // camera the viewer moved is kept then, just re-clamped.
+    // re-runs when Next.js shows this page again. Leaving usually resets the
+    // camera, so it refits; after a trip to the Inventory page mid-edit, the
+    // camera the viewer moved is kept, just re-clamped.
     const bounds = canvas.getBoundingClientRect();
     sizeRef.current = { width: bounds.width, height: bounds.height };
     cameraRef.current = hasInteractedRef.current ? clampCamera(cameraRef.current, sizeRef.current) : fittedCamera(sizeRef.current);
-    world.style.transform = cameraTransform(cameraRef.current);
+    applyCamera(world, cameraRef.current);
     world.dataset.ready = "";
 
     // Watches the canvas itself, so it also catches changes that are not
@@ -151,6 +198,8 @@ export function GardenCanvas({ initialItems = gardenItems }: { initialItems?: Ga
     if (!canvas) return;
 
     function handleWheel(event: WheelEvent) {
+      // The inventory picker sits over the garden; leave its wheel events alone.
+      if (event.target instanceof Element && event.target.closest("[data-no-camera]")) return;
       event.preventDefault();
       markInteracted();
 
@@ -169,17 +218,37 @@ export function GardenCanvas({ initialItems = gardenItems }: { initialItems?: Ga
     return () => canvas.removeEventListener("wheel", handleWheel);
   }, [canvasPoint, markInteracted, setCamera]);
 
+  // Leaving the page ends whatever was going on: coming back home starts out
+  // of edit mode with the whole garden in view. The one exception is a trip
+  // to the Inventory page mid-edit, say to pick a plant with Use: coming
+  // straight back from there finds everything as it was.
+  useResetOnLeave(
+    () => {
+      setEditing(false);
+      setSelectedTile(null);
+      setPickerTile(null);
+      setHoverTile(null);
+      pendingPlant.set(null);
+      // The camera refits when the page is shown again.
+      hasInteractedRef.current = false;
+    },
+    () => (isEditing ? "/inventory" : null),
+  );
+
+  // Escape backs out one step: the selection, then the waiting plant, then
+  // edit mode. The inventory picker handles its own Escape.
   useEffect(() => {
-    if (!placing) return;
+    if (!isEditing || pickerTile) return;
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setPlacing(false);
-        setHoverTile(null);
-      }
+      if (event.key !== "Escape") return;
+      if (activeTile) setSelectedTile(null);
+      else if (placingPlant) pendingPlant.set(null);
+      else setEditing(false);
+      setHoverTile(null);
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [placing]);
+  }, [isEditing, pickerTile, activeTile, placingPlant]);
 
   function pan(dx: number, dy: number) {
     markInteracted();
@@ -187,22 +256,39 @@ export function GardenCanvas({ initialItems = gardenItems }: { initialItems?: Ga
     setCamera({ ...current, x: current.x + dx, y: current.y + dy });
   }
 
+  // With a plant waiting from "Use", a tap plants it right there, in place of
+  // anything already on the tile. Otherwise a tap only selects the tile, and
+  // it stays highlighted so the player can see exactly which tile the buttons
+  // will act on. Tapping it again, or off the grid, lets go.
   function handleTap(point: Point) {
-    if (!placing) return;
+    if (!isEditing) return;
     const tile = tileAt(point);
-    if (!tile) return;
-
-    const key = tileKey(tile);
-    if (occupied.has(key)) {
-      setItems((current) => current.filter((item) => tileKey(item.tile) !== key));
+    if (placingPlant) {
+      if (!tile) return;
+      plantOnTile(placingPlant.id, tile);
+      pendingPlant.set(null);
+      // Edit mode stays open afterwards, as if the player had pressed Edit,
+      // with nothing selected.
+      setEditing(true);
+      setSelectedTile(null);
+      setHoverTile(null);
       return;
     }
+    setSelectedTile(tile && !sameTile(tile, activeTile) ? tile : null);
+  }
 
-    // TEMPORARY: until there is an inventory picker, cycle through the
-    // player's drawn plants, or the placeholder doodles if they have none.
-    const choices: PlantArt[] = inventory.length > 0 ? inventory.map(inventoryArt) : placeholderPlants;
-    const art = choices[nextPlaceholderRef.current++ % choices.length];
-    setItems((current) => [...current, { id: key, tile, art }]);
+  function pickPlant(plant: InventoryPlant) {
+    if (!pickerTile) return;
+    // Replacing works the same way: the new plant takes the tile.
+    plantOnTile(plant.id, pickerTile);
+    setPickerTile(null);
+    setSelectedTile(null);
+  }
+
+  function stashSelected() {
+    if (!selectedItem) return;
+    stashTile(selectedItem.tile);
+    setSelectedTile(null);
   }
 
   // Mouse, pen and touch all arrive as pointer events. `touch-action: none` on
@@ -218,7 +304,7 @@ export function GardenCanvas({ initialItems = gardenItems }: { initialItems?: Ga
 
     if (pointers.size === 1) {
       tapRef.current = { pointerId: event.pointerId, start: point };
-      if (placing) updateHover(tileAt(point));
+      if (isEditing) updateHover(tileAt(point));
       return;
     }
 
@@ -235,7 +321,7 @@ export function GardenCanvas({ initialItems = gardenItems }: { initialItems?: Ga
 
     if (!previous) {
       // A mouse moving with no button held: show which tile a click would use.
-      if (placing && event.pointerType === "mouse") updateHover(tileAt(point));
+      if (isEditing && event.pointerType === "mouse") updateHover(tileAt(point));
       return;
     }
     pointers.set(event.pointerId, point);
@@ -287,8 +373,14 @@ export function GardenCanvas({ initialItems = gardenItems }: { initialItems?: Ga
     if (event.pointerType === "mouse" && !pointersRef.current.has(event.pointerId)) setHoverTile(null);
   }
 
-  function togglePlacing() {
-    setPlacing((current) => !current);
+  function toggleEditing() {
+    if (isEditing) {
+      setEditing(false);
+      pendingPlant.set(null);
+      setSelectedTile(null);
+    } else {
+      setEditing(true);
+    }
     setHoverTile(null);
   }
 
@@ -300,7 +392,7 @@ export function GardenCanvas({ initialItems = gardenItems }: { initialItems?: Ga
   return (
     <section
       aria-label="Garden canvas"
-      className={placing ? "garden-canvas is-placing" : "garden-canvas"}
+      className={isEditing ? "garden-canvas is-editing" : "garden-canvas"}
       onPointerCancel={handlePointerCancel}
       onPointerDown={handlePointerDown}
       onPointerLeave={handlePointerLeave}
@@ -309,34 +401,46 @@ export function GardenCanvas({ initialItems = gardenItems }: { initialItems?: Ga
       ref={canvasRef}
     >
       <div className="garden-world" ref={worldRef}>
-        {/* Grid lines are always shown while planting, whatever the viewer's setting. */}
-        <GridLayer
-          highlight={placing ? hoverTile : null}
-          highlightOccupied={hoverTile !== null && occupied.has(tileKey(hoverTile))}
-          showLines={showGrid || placing}
-        />
-        <PlantLayer items={items} />
+        {/* The tile lines are an editing aid: shown in edit mode, never outside
+            it. A selected tile keeps its highlight; a mouse hover only shows
+            while nothing is selected. */}
+        <GridLayer highlight={isEditing ? (activeTile ?? hoverTile) : null} showLines={isEditing} />
+        <PlantLayer focusId={selectedItem?.id ?? null} items={items} placing={placingPlant !== null} />
       </div>
-      <div aria-label="Garden view controls" className="garden-controls" onPointerDown={(event) => event.stopPropagation()} role="group">
-        <button
-          aria-pressed={showGrid}
-          className="garden-control"
-          disabled={placing}
-          onClick={() => showGridFlag.set(!showGrid)}
-          title={placing ? "The grid is always shown while planting" : undefined}
-          type="button"
-        >
-          Grid
-        </button>
-        <button aria-pressed={placing} className="garden-control" onClick={togglePlacing} type="button">
-          {placing ? "Done" : "Plant"}
-        </button>
-        <button className="garden-control" onClick={resetCamera} type="button">
-          Reset
-        </button>
+      {/* The space under a selected plant is kept free for things shown with it
+          later, so its options sit with the other controls. */}
+      <div aria-label="Garden controls" className="garden-controls" onPointerDown={stopPropagation} role="group">
+        {activeTile ? (
+          <div aria-label={selectedItem ? `Options for “${selectedItem.art.alt}”` : "Options for this tile"} className="garden-controls-row" role="group">
+            {selectedItem ? (
+              <>
+                <button className="garden-control" onClick={stashSelected} type="button">
+                  Stash
+                </button>
+                <button className="garden-control" onClick={() => setPickerTile(selectedItem.tile)} type="button">
+                  Replace
+                </button>
+              </>
+            ) : (
+              <button className="garden-control" onClick={() => setPickerTile(activeTile)} type="button">
+                Add plant
+              </button>
+            )}
+          </div>
+        ) : null}
+        <div className="garden-controls-row">
+          <button aria-pressed={isEditing} className="garden-control" onClick={toggleEditing} type="button">
+            {isEditing ? "Done" : "Edit"}
+          </button>
+          <button className="garden-control" onClick={resetCamera} type="button">
+            Reset
+          </button>
+        </div>
       </div>
-      {placing ? (
-        <p className="garden-hint">Tap a tile to plant · Tap again to remove</p>
+      {isEditing ? (
+        activeTile ? null : (
+          <p className="garden-hint">{placingPlant ? `Tap a tile to plant “${placingPlant.name}”` : "Tap a tile to add or change its plant"}</p>
+        )
       ) : (
         // Shown until the viewer first pans or zooms. Both wordings are
         // rendered; CSS picks the one for a touch screen or a mouse.
@@ -345,6 +449,11 @@ export function GardenCanvas({ initialItems = gardenItems }: { initialItems?: Ga
           <span className="hint-mouse">Drag to move · Scroll to zoom</span>
         </p>
       )}
+      {pickerTile ? (
+        <div className="garden-picker" data-no-camera onPointerDown={stopPropagation} onPointerMove={stopPropagation} onPointerUp={stopPropagation}>
+          <InventoryView mode="pick" onCancel={() => setPickerTile(null)} onPick={pickPlant} />
+        </div>
+      ) : null}
     </section>
   );
 }

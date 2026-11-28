@@ -49,8 +49,5 @@ export function createStoredFlag(key: string, defaultValue: boolean) {
   return { get, set, useValue };
 }
 
-/** Whether this viewer sees the inner grid lines. Never affects other viewers. */
-export const showGridFlag = createStoredFlag("garden:show-grid", true);
-
 /** Set once the viewer has panned or zoomed, which retires the how-to hint. */
 export const hintDismissedFlag = createStoredFlag("garden:hint-dismissed", false);

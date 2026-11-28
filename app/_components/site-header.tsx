@@ -21,6 +21,7 @@ const navigation: readonly NavItem[] = [
   {
     label: "Inventory",
     className: "inventory-link",
+    href: "/inventory",
     icons: [
       { className: "inventory-pot-one", src: "/figma/inventory-pot-one.svg" },
       { className: "inventory-pot-two", src: "/figma/inventory-pot-two.svg" },

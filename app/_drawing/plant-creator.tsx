@@ -4,7 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useId, useMemo, useRef, useState } from "react";
-import { addToInventory, svgDataUrl } from "../_garden/inventory";
+import { addPlant, svgDataUrl } from "../_inventory/inventory";
+import { rollRarity } from "../_inventory/rarity";
 import { diamondPoints, gridToWorld, TILE_HALF_HEIGHT } from "../_garden/geometry";
 import {
   addPoint,
@@ -15,6 +16,7 @@ import {
   drawingToSvg,
   hasInk,
   INK,
+  inkBounds,
   isInsideBox,
   PEN_WIDTH,
   strokePath,
@@ -23,7 +25,8 @@ import {
   type Tool,
 } from "./drawing";
 
-const NAME_LIMIT = 32;
+// Long enough for a fun name, short enough to fit one line on a card.
+const NAME_LIMIT = 20;
 
 // The drawing stage shows the blue box plus the guide tile, which pokes out
 // past the box. Positions are from the Figma design, relative to the box.
@@ -250,7 +253,7 @@ export function PlantCreator() {
   function create(event: React.FormEvent) {
     event.preventDefault();
     if (!canCreate) return;
-    addToInventory(name.trim(), drawingToSvg(strokes));
+    addPlant({ name: name.trim(), svg: drawingToSvg(strokes), bounds: inkBounds(strokes), rarity: rollRarity() });
     reset();
     // The congrats page and live rarity draw will go here.
     router.push("/");
